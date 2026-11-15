@@ -1214,13 +1214,17 @@ def serve_with_failover(router, api, raw_body, features, requires):
                     if partial is None:
                         partial = answer
                     break
-            # A refusal: the failure schedules refuse single calls, so a
-            # provider's first refusal of the trial earns one immediate retry
-            # before the request moves on; a refusal after that, or a second
-            # in a row, is read as a spent budget or an outage and is final.
-            first_refusal = router.refusals.get(provider["id"], 0) == 0
+            # A refusal: the failure schedules refuse single calls, and one
+            # provider can hold several such calls in a trial, so every
+            # refusal earns one immediate retry before the request moves on.
+            # A scheduled refusal is followed by a served call; a spent
+            # budget or an outage refuses the retry too and is final. The
+            # retry costs nothing the score counts (upstream calls are not
+            # scored), and because the workload's weights never rise as it
+            # runs, a call a retry wins for this request is worth at least
+            # what it would have been worth to a later one.
             router.note_refusal(provider["id"])
-            if not (first_refusal and attempts == 1):
+            if attempts > 1:
                 break
     return partial
 
